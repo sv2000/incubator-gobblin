@@ -27,6 +27,7 @@ import java.util.Map;
 
 import org.apache.hadoop.fs.Path;
 
+import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import com.typesafe.config.Config;
 
@@ -57,7 +58,10 @@ public class JobSpecDagFactory {
     for (JobSpecWithExecutor jobSpecWithExecutor : jobSpecs) {
       Dag.DagNode<JobSpecWithExecutor> dagNode = new Dag.DagNode<>(jobSpecWithExecutor);
       dagNodeList.add(dagNode);
-      jobSpecMap.put(getJobFileNameFromJobSpec(jobSpecWithExecutor), dagNode);
+      String jobName = getJobFileNameFromJobSpec(jobSpecWithExecutor);
+      if (jobName != null) {
+        jobSpecMap.put(jobName, dagNode);
+      }
     }
 
     /**
@@ -68,7 +72,11 @@ public class JobSpecDagFactory {
      * TODO: we likely do not need 2 for loops and we can do this in 1 pass.
      */
     for (JobSpecWithExecutor jobSpecWithExecutor : jobSpecs) {
-      Dag.DagNode<JobSpecWithExecutor> node = jobSpecMap.get(getJobFileNameFromJobSpec(jobSpecWithExecutor));
+      String jobName = getJobFileNameFromJobSpec(jobSpecWithExecutor);
+      if (jobName == null) {
+        continue;
+      }
+      Dag.DagNode<JobSpecWithExecutor> node = jobSpecMap.get(jobName);
       Collection<String> dependencies = getDependencies(jobSpecWithExecutor.getJobSpec().getConfig());
       for (String dependency : dependencies) {
         Dag.DagNode<JobSpecWithExecutor> parentNode = jobSpecMap.get(dependency);
@@ -96,7 +104,12 @@ public class JobSpecDagFactory {
    * @return the file name without extension of the properties file from which the JobSpec is derived.
    */
   private static String getJobFileNameFromJobSpec(JobSpecWithExecutor jobSpec) {
-    URI jobTemplateUri = jobSpec.getJobSpec().getTemplateURI().get();
-    return Files.getNameWithoutExtension(new Path(jobTemplateUri).getName());
+    Optional<URI> jobTemplateUri = jobSpec.getJobSpec().getTemplateURI();
+
+    if (jobTemplateUri.isPresent()) {
+      return Files.getNameWithoutExtension(new Path(jobTemplateUri.get()).getName());
+    } else {
+      return null;
+    }
   }
 }

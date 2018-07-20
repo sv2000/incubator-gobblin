@@ -18,6 +18,7 @@
 package org.apache.gobblin.service.modules.flow;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.Map;
 import java.util.concurrent.TimeUnit;
 
@@ -42,6 +43,7 @@ import org.apache.gobblin.service.modules.core.GitFlowGraphMonitor;
 import org.apache.gobblin.service.modules.flowgraph.BaseFlowGraph;
 import org.apache.gobblin.service.modules.flowgraph.Dag;
 import org.apache.gobblin.service.modules.flowgraph.FlowGraph;
+import org.apache.gobblin.service.modules.spec.JobSpecDagFactory;
 import org.apache.gobblin.service.modules.spec.JobSpecWithExecutor;
 import org.apache.gobblin.service.modules.template_catalog.FSFlowCatalog;
 
@@ -98,31 +100,24 @@ public class MultiHopFlowToJobSpecCompiler extends BaseFlowToJobSpecCompiler {
    * @return
    */
   @Override
-  public Map<Spec, SpecExecutor> compileFlow(Spec spec) {
+  public Dag<JobSpecWithExecutor> compileFlow(Spec spec) {
     Preconditions.checkNotNull(spec);
     Preconditions.checkArgument(spec instanceof FlowSpec, "MultiHopFlowToJobSpecCompiler only accepts FlowSpecs");
 
     long startTime = System.nanoTime();
-    Map<Spec, SpecExecutor> specExecutorMap = Maps.newLinkedHashMap();
+    Dag<JobSpecWithExecutor> jobSpecDag = JobSpecDagFactory.createDagFromJobSpecs(new ArrayList<>());
 
     FlowGraphPathFinder pathFinder = new FlowGraphPathFinder(this.flowGraph, (FlowSpec) spec);
     try {
-      Dag<JobSpecWithExecutor> jobSpecDag = pathFinder.findPath();
-      //TODO: Just a dummy return value for now. compileFlow() signature needs to be modified to return a Dag instead
-      // of a Map. For now just add all specs into the map.
-      for (Dag.DagNode<JobSpecWithExecutor> node: jobSpecDag.getNodes()) {
-        JobSpecWithExecutor specWithExecutor = node.getValue();
-        specExecutorMap.put(specWithExecutor.getJobSpec(), specWithExecutor.getSpecExecutor());
-      }
+      jobSpecDag = pathFinder.findPath();
+      Instrumented.markMeter(this.flowCompilationSuccessFulMeter);
+      Instrumented.updateTimer(this.flowCompilationTimer, System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
+      return jobSpecDag;
     } catch (FlowGraphPathFinder.PathFinderException e) {
       Instrumented.markMeter(this.flowCompilationFailedMeter);
       log.error("Exception encountered while compiling flow spec", e);
-      return null;
     }
-    Instrumented.markMeter(this.flowCompilationSuccessFulMeter);
-    Instrumented.updateTimer(this.flowCompilationTimer, System.nanoTime() - startTime, TimeUnit.NANOSECONDS);
-
-    return specExecutorMap;
+    return jobSpecDag;
   }
 
   @Override

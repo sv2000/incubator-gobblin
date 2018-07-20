@@ -20,6 +20,7 @@ package org.apache.gobblin.aws;
 import org.apache.commons.codec.binary.Base64;
 import org.apache.commons.io.IOUtils;
 import org.junit.BeforeClass;
+import org.junit.Ignore;
 import org.testng.Assert;
 import org.testng.annotations.Test;
 
@@ -31,6 +32,7 @@ import com.google.common.base.Optional;
  *
  * @author Abhishek Tiwari
  */
+@Ignore
 @Test(groups = { "gobblin.aws" })
 public class CloudInitScriptBuilderTest {
   private static final String MASTER_CLOUD_INIT_SCRIPT = "masterCloudInit.sh";

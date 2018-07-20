@@ -38,7 +38,7 @@ import org.apache.gobblin.instrumented.Instrumentable;
 import org.apache.gobblin.metrics.MetricContext;
 import org.apache.gobblin.metrics.Tag;
 import org.apache.gobblin.runtime.api.FlowSpec;
-import org.apache.gobblin.runtime.api.SpecCompiler;
+import org.apache.gobblin.service.modules.flow.SpecCompiler;
 import org.apache.gobblin.runtime.api.TopologySpec;
 import org.apache.gobblin.runtime.api.Spec;
 import org.apache.gobblin.runtime.api.SpecCatalogListener;
@@ -46,6 +46,8 @@ import org.apache.gobblin.runtime.spec_catalog.TopologyCatalog;
 import org.apache.gobblin.service.ServiceConfigKeys;
 import org.apache.gobblin.service.ServiceMetricNames;
 import org.apache.gobblin.service.modules.flow.IdentityFlowToJobSpecCompiler;
+import org.apache.gobblin.service.modules.flowgraph.Dag;
+import org.apache.gobblin.service.modules.spec.JobSpecWithExecutor;
 import org.apache.gobblin.util.ClassAliasResolver;
 import org.apache.gobblin.util.ConfigUtils;
 import org.slf4j.LoggerFactory;
@@ -186,25 +188,25 @@ public class Orchestrator implements SpecCatalogListener, Instrumentable {
 
     long startTime = System.nanoTime();
     if (spec instanceof FlowSpec) {
-      Map<Spec, SpecExecutor> specExecutorInstanceMap = specCompiler.compileFlow(spec);
+      Dag<JobSpecWithExecutor> jobSpecDag = specCompiler.compileFlow(spec);
 
-      if (specExecutorInstanceMap.isEmpty()) {
+      if (jobSpecDag.isEmpty()) {
         _log.warn("Cannot determine an executor to run on for Spec: " + spec);
         return;
       }
 
       // Schedule all compiled JobSpecs on their respective Executor
-      for (Map.Entry<Spec, SpecExecutor> specsToExecute : specExecutorInstanceMap.entrySet()) {
+      for (Dag.DagNode<JobSpecWithExecutor> node : jobSpecDag.getNodes()) {
         // Run this spec on selected executor
         SpecProducer producer = null;
         try {
-          producer = specsToExecute.getValue().getProducer().get();
-          Spec jobSpec = specsToExecute.getKey();
+          producer = node.getValue().getSpecExecutor().getProducer().get();
+          Spec jobSpec = node.getValue().getJobSpec();
 
           _log.info(String.format("Going to orchestrate JobSpec: %s on Executor: %s", jobSpec, producer));
           producer.addSpec(jobSpec);
         } catch(Exception e) {
-          _log.error("Cannot successfully setup spec: " + specsToExecute.getKey() + " on executor: " + producer +
+          _log.error("Cannot successfully setup spec: " + node.getValue().getJobSpec() + " on executor: " + producer +
               " for flow: " + spec, e);
         }
       }
@@ -221,25 +223,26 @@ public class Orchestrator implements SpecCatalogListener, Instrumentable {
     // .. this will work for Identity compiler but not always for multi-hop.
     // Note: Current logic assumes compilation is consistent between all executions
     if (spec instanceof FlowSpec) {
-      Map<Spec, SpecExecutor> specExecutorInstanceMap = specCompiler.compileFlow(spec);
+      Dag<JobSpecWithExecutor> jobSpecDag = specCompiler.compileFlow(spec);
 
-      if (specExecutorInstanceMap.isEmpty()) {
+      if (jobSpecDag.isEmpty()) {
         _log.warn("Cannot determine an executor to delete Spec: " + spec);
         return;
       }
 
       // Delete all compiled JobSpecs on their respective Executor
-      for (Map.Entry<Spec, SpecExecutor> specsToDelete : specExecutorInstanceMap.entrySet()) {
+
+      for (Dag.DagNode<JobSpecWithExecutor> node: jobSpecDag.getNodes()) {
         // Delete this spec on selected executor
         SpecProducer producer = null;
         try {
-          producer = specsToDelete.getValue().getProducer().get();
-          Spec jobSpec = specsToDelete.getKey();
+          producer = node.getValue().getSpecExecutor().getProducer().get();
+          Spec jobSpec = node.getValue().getJobSpec();
 
           _log.info(String.format("Going to delete JobSpec: %s on Executor: %s", jobSpec, producer));
           producer.deleteSpec(jobSpec.getUri(), headers);
         } catch(Exception e) {
-          _log.error("Cannot successfully delete spec: " + specsToDelete.getKey() + " on executor: " + producer +
+          _log.error("Cannot successfully delete spec: " + node.getValue().getJobSpec() + " on executor: " + producer +
               " for flow: " + spec, e);
         }
       }
