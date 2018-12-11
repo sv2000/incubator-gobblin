@@ -59,7 +59,7 @@ public class KafkaKeyValueProducerPusher<K, V> implements Pusher<Pair<K, V>> {
     props.put(ProducerConfig.VALUE_SERIALIZER_CLASS_CONFIG, ByteArraySerializer.class.getName());
     props.put(ProducerConfig.ACKS_CONFIG, "all");
     props.put(ProducerConfig.RETRIES_CONFIG, 3);
-    //To guarantee ordered delivery, the maximum in flight requests must be set to 1.
+    //To guarantee ordered delivery with retries enabled, max.in.flight.requests.per.connection must be set to 1.
     props.put(ProducerConfig.MAX_IN_FLIGHT_REQUESTS_PER_CONNECTION, 1);
 
     // add the kafka scoped config. if any of the above are specified then they are overridden
